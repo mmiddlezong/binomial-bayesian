@@ -139,6 +139,14 @@
 	const svgWidth = 700;
 	const svgHeight = 400;
 	const pathData = $derived(generatePath(posteriorPoints, svgWidth, svgHeight));
+
+	// Grid calculations
+	const padding = 40;
+	const plotWidth = svgWidth - 2 * padding;
+	const plotHeight = svgHeight - 2 * padding;
+	const gridSpacing = 50;
+	const numVerticalGridLines = Math.floor(plotWidth / gridSpacing) + 1;
+	const numHorizontalGridLines = Math.floor(plotHeight / gridSpacing) + 1;
 </script>
 
 <div class="min-h-screen bg-neutral-950 p-8 font-sans">
@@ -298,88 +306,121 @@
 		<div class="bg-neutral-900 border border-neutral-800 rounded-xl p-6">
 			<h2 class="text-lg font-medium text-neutral-200 mb-6">Posterior Distribution</h2>
 
-			<svg width={svgWidth} height={svgHeight} class="mx-auto w-full h-auto">
-				<!-- Grid lines -->
-				<defs>
-					<pattern id="grid" width="50" height="50" patternUnits="userSpaceOnUse">
-						<path d="M 50 0 L 0 0 0 50" fill="none" stroke="#262626" stroke-width="1" />
-					</pattern>
-				</defs>
-				<rect width={svgWidth} height={svgHeight} fill="url(#grid)" />
-
-				<!-- Axes -->
-				<line
-					x1="40"
-					y1={svgHeight - 40}
-					x2={svgWidth - 40}
-					y2={svgHeight - 40}
-					stroke="#525252"
-					stroke-width="1"
-				/>
-				<line x1="40" y1="40" x2="40" y2={svgHeight - 40} stroke="#525252" stroke-width="1" />
-
-				<!-- X-axis labels -->
-				{#each [0, 0.25, 0.5, 0.75, 1.0] as tick}
-					<text
-						x={40 + tick * (svgWidth - 80)}
-						y={svgHeight - 20}
-						text-anchor="middle"
-						class="text-xs fill-neutral-500"
-					>
-						{(tick * 100).toFixed(0)}%
-					</text>
-				{/each}
-
-				<!-- Axis labels -->
-				<text
-					x={svgWidth / 2}
-					y={svgHeight - 5}
-					text-anchor="middle"
-					class="text-xs uppercase tracking-widest fill-neutral-600 font-medium"
+			<div class="w-full flex justify-center py-4">
+				<svg
+					width={svgWidth}
+					height={svgHeight}
+					viewBox="0 0 {svgWidth} {svgHeight}"
+					preserveAspectRatio="xMidYMid meet"
+					class="max-w-full h-auto"
 				>
-					Win Rate
-				</text>
+					<!-- Background -->
+					<rect width={svgWidth} height={svgHeight} fill="#171717" />
 
-				<text
-					x="15"
-					y={svgHeight / 2}
-					text-anchor="middle"
-					transform="rotate(-90, 15, {svgHeight / 2})"
-					class="text-xs uppercase tracking-widest fill-neutral-600 font-medium"
-				>
-					Probability Density
-				</text>
+					<!-- Grid lines -->
+					{#each Array(numVerticalGridLines) as _, i}
+						<line
+							x1={padding + i * gridSpacing}
+							y1={padding}
+							x2={padding + i * gridSpacing}
+							y2={svgHeight - padding}
+							stroke="#262626"
+							stroke-width="1"
+						/>
+					{/each}
+					{#each Array(numHorizontalGridLines) as _, i}
+						<line
+							x1={padding}
+							y1={padding + i * gridSpacing}
+							x2={svgWidth - padding}
+							y2={padding + i * gridSpacing}
+							stroke="#262626"
+							stroke-width="1"
+						/>
+					{/each}
 
-				<!-- Distribution curve -->
-				<path
-					d={pathData}
-					stroke="#e5e5e5"
-					stroke-width="2"
-					fill="none"
-					stroke-linecap="round"
-					stroke-linejoin="round"
-				/>
-
-				<!-- Fill under curve -->
-				{#if pathData}
-					<path
-						d={pathData + ` L ${svgWidth - 40} ${svgHeight - 40} L 40 ${svgHeight - 40} Z`}
-						fill="#e5e5e5"
-						fill-opacity="0.05"
+					<!-- Axes -->
+					<line
+						x1={padding}
+						y1={svgHeight - padding}
+						x2={svgWidth - padding}
+						y2={svgHeight - padding}
+						stroke="#525252"
+						stroke-width="1"
 					/>
-				{/if}
+					<line
+						x1={padding}
+						y1={padding}
+						x2={padding}
+						y2={svgHeight - padding}
+						stroke="#525252"
+						stroke-width="1"
+					/>
 
-				<!-- Mean line -->
-				<line
-					x1={40 + stats.mean * (svgWidth - 80)}
-					y1="40"
-					x2={40 + stats.mean * (svgWidth - 80)}
-					y2={svgHeight - 40}
-					stroke="#737373"
-					stroke-width="1"
-					stroke-dasharray="4,4"
-				/>
-			</svg>
+					<!-- X-axis labels -->
+					{#each [0, 0.25, 0.5, 0.75, 1.0] as tick}
+						<text
+							x={padding + tick * plotWidth}
+							y={svgHeight - 20}
+							text-anchor="middle"
+							class="text-xs fill-neutral-500"
+						>
+							{(tick * 100).toFixed(0)}%
+						</text>
+					{/each}
+
+					<!-- Axis labels -->
+					<text
+						x={svgWidth / 2}
+						y={svgHeight - 5}
+						text-anchor="middle"
+						class="text-xs uppercase tracking-widest fill-neutral-600 font-medium"
+					>
+						Win Rate
+					</text>
+
+					<text
+						x="15"
+						y={svgHeight / 2}
+						text-anchor="middle"
+						transform="rotate(-90, 15, {svgHeight / 2})"
+						class="text-xs uppercase tracking-widest fill-neutral-600 font-medium"
+					>
+						Probability Density
+					</text>
+
+					<!-- Distribution curve -->
+					<path
+						d={pathData}
+						stroke="#e5e5e5"
+						stroke-width="2"
+						fill="none"
+						stroke-linecap="round"
+						stroke-linejoin="round"
+					/>
+
+					<!-- Fill under curve -->
+					{#if pathData}
+						<path
+							d={pathData +
+								` L ${svgWidth - padding} ${svgHeight - padding} L ${padding} ${svgHeight - padding} Z`}
+							fill="#e5e5e5"
+							fill-opacity="0.05"
+						/>
+					{/if}
+
+					<!-- Mean line -->
+					<line
+						x1={padding + stats.mean * plotWidth}
+						y1={padding}
+						x2={padding + stats.mean * plotWidth}
+						y2={svgHeight - padding}
+						stroke="#737373"
+						stroke-width="1"
+						stroke-dasharray="4,4"
+					/>
+				</svg>
+			</div>
 
 			<div class="mt-6 text-sm text-neutral-500 flex justify-between items-center">
 				<p>
