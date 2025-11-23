@@ -11,17 +11,23 @@
 	// Derived wins and losses based on input mode
 	const actualWins = $derived(() => {
 		if (inputMode === 'wins-losses') {
-			return wins;
+			return Math.max(0, wins);
 		} else {
-			return Math.round((winRate / 100) * totalGames);
+			const calculated = Math.round(
+				(Math.max(0, Math.min(100, winRate)) / 100) * Math.max(0, totalGames)
+			);
+			return Math.max(0, calculated);
 		}
 	});
 
 	const actualLosses = $derived(() => {
 		if (inputMode === 'wins-losses') {
-			return losses;
+			return Math.max(0, losses);
 		} else {
-			return totalGames - Math.round((winRate / 100) * totalGames);
+			const calculated =
+				Math.max(0, totalGames) -
+				Math.round((Math.max(0, Math.min(100, winRate)) / 100) * Math.max(0, totalGames));
+			return Math.max(0, calculated);
 		}
 	});
 
@@ -31,7 +37,26 @@
 		// PDF = x^(alpha-1) * (1-x)^(beta-1) / B(alpha, beta)
 		// B(alpha, beta) = Gamma(alpha) * Gamma(beta) / Gamma(alpha + beta)
 
-		if (x <= 0 || x >= 1) return 0;
+		// Handle boundary cases properly
+		if (x < 0 || x > 1) return 0;
+
+		// At x=0: only non-zero if alpha=1 (otherwise x^(alpha-1) -> 0)
+		if (x === 0) {
+			if (alpha === 1) {
+				const logBeta = logGamma(alpha) + logGamma(beta) - logGamma(alpha + beta);
+				return Math.exp(-logBeta); // (1-0)^(beta-1) / B(alpha, beta)
+			}
+			return 0;
+		}
+
+		// At x=1: only non-zero if beta=1 (otherwise (1-x)^(beta-1) -> 0)
+		if (x === 1) {
+			if (beta === 1) {
+				const logBeta = logGamma(alpha) + logGamma(beta) - logGamma(alpha + beta);
+				return Math.exp(-logBeta); // x^(alpha-1) / B(alpha, beta)
+			}
+			return 0;
+		}
 
 		const logBeta = logGamma(alpha) + logGamma(beta) - logGamma(alpha + beta);
 		const logPDF = (alpha - 1) * Math.log(x) + (beta - 1) * Math.log(1 - x) - logBeta;
@@ -41,10 +66,14 @@
 
 	// Stirling's approximation for log-gamma function
 	function logGamma(z: number): number {
-		if (z < 0) return NaN;
+		// Ensure z is positive to prevent NaN
+		if (z <= 0 || !isFinite(z)) return NaN;
+
 		if (z < 0.5) {
 			// Use reflection formula for small z
-			return Math.log(Math.PI) - Math.log(Math.sin(Math.PI * z)) - logGamma(1 - z);
+			const sinTerm = Math.sin(Math.PI * z);
+			if (sinTerm === 0) return NaN; // Avoid division by zero
+			return Math.log(Math.PI) - Math.log(Math.abs(sinTerm)) - logGamma(1 - z);
 		}
 
 		// Stirling's approximation
@@ -69,8 +98,8 @@
 	function calculatePosterior() {
 		// Using Beta(1,1) uniform prior
 		// Posterior is Beta(alpha + wins, beta + losses)
-		const alpha = 1 + actualWins();
-		const beta = 1 + actualLosses();
+		const alpha = Math.max(1, 1 + actualWins());
+		const beta = Math.max(1, 1 + actualLosses());
 
 		const points: Array<{ x: number; y: number }> = [];
 		const numPoints = 200;
@@ -78,7 +107,10 @@
 		for (let i = 0; i <= numPoints; i++) {
 			const x = i / numPoints;
 			const y = betaPDF(x, alpha, beta);
-			points.push({ x, y });
+			// Filter out NaN or Infinity values
+			if (isFinite(y)) {
+				points.push({ x, y });
+			}
 		}
 
 		return points;
@@ -93,8 +125,22 @@
 		// Mean of Beta distribution
 		const mean = alpha / total;
 
-		// Mode of Beta distribution (when alpha, beta > 1)
-		const mode = alpha > 1 && beta > 1 ? (alpha - 1) / (total - 2) : mean;
+		// Mode of Beta distribution
+		let mode: number;
+		if (alpha > 1 && beta > 1) {
+			// Standard case: mode = (alpha - 1) / (total - 2)
+			mode = (alpha - 1) / (total - 2);
+		} else if (alpha <= 1 && beta > 1) {
+			// Mode at x=0 when alpha <= 1 and beta > 1
+			mode = 0;
+		} else if (alpha > 1 && beta <= 1) {
+			// Mode at x=1 when beta <= 1 and alpha > 1
+			mode = 1;
+		} else {
+			// alpha <= 1 and beta <= 1: distribution is U-shaped or uniform
+			// Use mean as a reasonable fallback
+			mode = mean;
+		}
 
 		// Standard deviation
 		const variance = (alpha * beta) / (total * total * (total + 1));
@@ -199,6 +245,10 @@
 							id="wins"
 							type="number"
 							bind:value={wins}
+							oninput={(e) => {
+								const val = parseFloat(e.currentTarget.value);
+								if (!isNaN(val) && val < 0) wins = 0;
+							}}
 							min="0"
 							class="w-full px-4 py-3 bg-neutral-800 border border-neutral-700 text-neutral-100 rounded-lg focus:ring-2 focus:ring-neutral-600 focus:border-transparent outline-none transition-all"
 						/>
@@ -214,6 +264,10 @@
 							id="losses"
 							type="number"
 							bind:value={losses}
+							oninput={(e) => {
+								const val = parseFloat(e.currentTarget.value);
+								if (!isNaN(val) && val < 0) losses = 0;
+							}}
 							min="0"
 							class="w-full px-4 py-3 bg-neutral-800 border border-neutral-700 text-neutral-100 rounded-lg focus:ring-2 focus:ring-neutral-600 focus:border-transparent outline-none transition-all"
 						/>
@@ -232,6 +286,10 @@
 							id="totalGames"
 							type="number"
 							bind:value={totalGames}
+							oninput={(e) => {
+								const val = parseFloat(e.currentTarget.value);
+								if (!isNaN(val) && val < 0) totalGames = 0;
+							}}
 							min="0"
 							class="w-full px-4 py-3 bg-neutral-800 border border-neutral-700 text-neutral-100 rounded-lg focus:ring-2 focus:ring-neutral-600 focus:border-transparent outline-none transition-all"
 						/>
@@ -247,6 +305,13 @@
 							id="winRate"
 							type="number"
 							bind:value={winRate}
+							oninput={(e) => {
+								const val = parseFloat(e.currentTarget.value);
+								if (!isNaN(val)) {
+									if (val < 0) winRate = 0;
+									else if (val > 100) winRate = 100;
+								}
+							}}
 							min="0"
 							max="100"
 							step="0.1"
